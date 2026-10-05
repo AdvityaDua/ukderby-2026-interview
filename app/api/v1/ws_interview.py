@@ -178,6 +178,29 @@ async def stt_stream_endpoint(
                 pass
 
 
+
+async def background_feedback_generation(session, interview_id: int):
+    print(f"[WS] Starting background feedback generation for interview {interview_id}...")
+    try:
+        feedback, feedback_usage = await session.client.generate_feedback(session.history, session.context_summary)
+        
+        db = SessionLocal()
+        interview = db.query(Interview).filter(Interview.id == interview_id).first()
+        if interview:
+            interview.feedback_json = feedback.model_dump()
+            interview.status = "completed"
+            db.commit()
+        db.close()
+        print(f"[WS] Successfully saved feedback for interview {interview_id}")
+    except Exception as e:
+        print(f"[WS] Background feedback error: {e}")
+        db = SessionLocal()
+        interview = db.query(Interview).filter(Interview.id == interview_id).first()
+        if interview:
+            interview.status = "error"
+            db.commit()
+        db.close()
+
 def _aggregate_audio_metrics(metrics_list: list[dict]) -> dict:
     """Aggregate per-answer audio metrics into a session summary."""
     if not metrics_list:
@@ -310,6 +333,26 @@ async def stream_interview_endpoint(
                     except Exception as db_err:
                         print(f"[WS] DB Error fetching github links: {db_err}")
                         
+                    # --- CREATE INTERVIEW DB RECORD ---
+                    interview_id = None
+                    try:
+                        db = SessionLocal()
+                        new_interview = Interview(
+                            user_id=int(user_id) if user_id.isdigit() else None,
+                            company=company,
+                            role=role,
+                            status="processing"
+                        )
+                        db.add(new_interview)
+                        db.commit()
+                        db.refresh(new_interview)
+                        interview_id = new_interview.id
+                        session.db_interview_id = interview_id # Save to session
+                        db.close()
+                    except Exception as db_err:
+                        print(f"[WS] Failed to create interview record: {db_err}")
+                    # ----------------------------------
+                        
                     if github_urls:
                         print(f"[WS] Found GitHub Links: {github_urls}")
                         # Inject into jd_text so the AI graph gets it
@@ -426,6 +469,8 @@ async def stream_interview_endpoint(
                         async for item in session.stream_response(None):
                             if item["type"] == "metadata":
                                 await manager.send_json({"type": "metadata", "is_coding": item["is_coding"]}, user_id)
+                            elif item["type"] == "audio":
+                                await manager.send_json({"type": "audio", "base64": item["base64"]}, user_id)
                             else:
                                 await manager.send_json({"type": "text", "content": item["content"]}, user_id)
                         await manager.send_json({"type": "stream_end"}, user_id)
@@ -465,37 +510,17 @@ async def stream_interview_endpoint(
                     await manager.save_session_to_cache(user_id)
                     
                     if getattr(session, 'ended', False):
-                        await manager.send_json({"type": "info", "content": "Interview complete. Generating feedback..."}, user_id)
+                        await manager.send_json({"type": "end_interview", "status": "processing_feedback"}, user_id)
                         
-                        try:
-                            feedback, feedback_usage = await session.client.generate_feedback(session.history, session.context_summary)
+                        # Launch background evaluation
+                        if hasattr(session, "db_interview_id") and session.db_interview_id:
+                            asyncio.create_task(background_feedback_generation(session, session.db_interview_id))
                             
-                            # Add feedback generation tokens to session
-                            session.input_tokens += feedback_usage.get("input_tokens", 0)
-                            session.output_tokens += feedback_usage.get("output_tokens", 0)
-                            print(f"[WS] Final tokens after feedback: in={session.input_tokens}, out={session.output_tokens}")
-                            
-                            audio_summary = _aggregate_audio_metrics(manager.get_audio_metrics(user_id))
-                            
-                            await manager.send_json({
-                                "type": "end_interview",
-                                "feedback": feedback.model_dump(),
-                                "audio_analysis": audio_summary,
-                            }, user_id)
-                        except Exception as fb_err:
-                            print(f"[WS] Feedback generation error for {user_id}: {str(fb_err)}")
-                            await manager.send_json({
-                                "type": "end_interview",
-                                "feedback": None,
-                                "error": str(fb_err),
-                                "audio_analysis": _aggregate_audio_metrics(manager.get_audio_metrics(user_id)),
-                            }, user_id)
-                        
                         # REPORT USAGE TO BACKEND
                         asyncio.create_task(session.report_usage(user_id, client_id))
 
                         await manager.clear_session(user_id)
-                        break 
+                        break
                 except Exception as e:
                     print(f"[WS] Error during response for {user_id}: {str(e)}")
                     await manager.send_json({"type": "error", "content": f"AI Engine error: {str(e)}"}, user_id)
@@ -516,6 +541,18 @@ async def stream_interview_endpoint(
                         "error": "no_answers",
                         "audio_analysis": {},
                     }, user_id)
+                    
+                    if hasattr(session, "db_interview_id") and session.db_interview_id:
+                        try:
+                            db = SessionLocal()
+                            interview = db.query(Interview).filter(Interview.id == session.db_interview_id).first()
+                            if interview:
+                                interview.status = "error"
+                                db.commit()
+                            db.close()
+                        except:
+                            pass
+
                     await manager.clear_session(user_id)
                     break
 

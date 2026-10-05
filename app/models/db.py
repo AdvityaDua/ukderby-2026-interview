@@ -27,3 +27,29 @@ class GithubLink(Base):
 
     company = relationship("Company", back_populates="github_links")
     topic = relationship("Topic", back_populates="github_links")
+
+from sqlalchemy import JSON, DateTime
+import datetime
+
+class User(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, unique=True, index=True)
+    hashed_password = Column(String)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    interviews = relationship("Interview", back_populates="user")
+
+class Interview(Base):
+    __tablename__ = "interviews"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    company = Column(String)
+    role = Column(String)
+    status = Column(String, default="completed") # processing, completed, error
+    feedback_json = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    user = relationship("User", back_populates="interviews")
+
+# Create tables
+Base.metadata.create_all(bind=engine)

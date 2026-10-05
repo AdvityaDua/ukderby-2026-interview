@@ -17,13 +17,15 @@ def generate_tts_sync(text_chunk: str):
         # gradio API returns a tuple or filepath
         res = tts_client.predict(
             text=text_chunk,
-            seed=0,
+            audio_prompt_path=None,
             temperature=0.8,
+            seed_num=0,
+            min_p=0.0,
             top_p=0.95,
             top_k=1000,
             repetition_penalty=1.2,
-            min_p=0,
-            api_name="/predict"
+            norm_loudness=True,
+            api_name="/generate"
         )
         audio_filepath = res[0] if isinstance(res, tuple) else res
         with open(audio_filepath, "rb") as af:
