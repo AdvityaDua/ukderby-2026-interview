@@ -1,0 +1,14 @@
+.env
+__pycache__/
+venv/
+.venv/
+.cache/
+chroma_db/
+.DS_Store
+github-actions-key
+github-actions-key.pub
+deploy-key
+deploy-key.pub
+ai-interview-*.json
+google_*.pdf
+*.log

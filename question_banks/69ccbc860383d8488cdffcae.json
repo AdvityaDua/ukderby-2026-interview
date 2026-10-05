@@ -1,0 +1,110 @@
+{
+  "title": "Flutter Developer Interview",
+  "sections": {
+    "Entry Questions": [
+      "Walk me through how Flutter renders UI on screen — from your Dart code down to pixels.",
+      "What is the difference between a StatelessWidget and a StatefulWidget, and when would you choose one over the other?",
+      "Explain the widget tree, element tree, and render tree. How are they related?"
+    ],
+    "Core Widgets & Layouts": [
+      "How does Flutter's flex layout system work? Compare Row/Column with Flex.",
+      "What is the difference between `Expanded`, `Flexible`, and `Spacer`?",
+      "When would you use a `CustomPaint` widget, and what does the `Canvas` API give you?",
+      "How does `RepaintBoundary` improve performance and when should you use it?",
+      "Explain the lifecycle of a StatefulWidget. Which methods are called and in what order?"
+    ],
+    "State Management": [
+      "Compare `setState`, `InheritedWidget`, `Provider`, and `Riverpod`. When would you pick each?",
+      "What is the difference between `ChangeNotifier` and `StateNotifier`?",
+      "How does BLoC pattern work? What problem does it solve compared to plain `setState`?",
+      "Explain how `ValueNotifier` works and give a real use case for it.",
+      "What are the downsides of using `setState` deep in a large widget tree?"
+    ],
+    "Navigation & Routing": [
+      "What is the difference between Navigator 1.0 and Navigator 2.0 (Router API)?",
+      "How does `go_router` compare to `auto_route`? What trade-offs exist?",
+      "How do you pass data between screens and get a result back on pop?",
+      "Explain deep linking in Flutter. How would you set it up for both Android and iOS?"
+    ],
+    "Async & Networking": [
+      "What is the difference between `Future` and `Stream`? Give a real example of each.",
+      "How does `async`/`await` work under the hood in Dart? What is the event loop?",
+      "How would you handle API errors gracefully across the whole app?",
+      "What is `Isolate` in Dart and when would you spawn one?",
+      "Compare `http` package with `Dio`. What does Dio add?"
+    ],
+    "Performance & Optimisation": [
+      "How do you profile a Flutter app for jank? Which tools do you use?",
+      "What causes frame drops and how do you fix them?",
+      "Explain `const` constructors — how do they help performance and what are the rules?",
+      "How does `ListView.builder` differ from `ListView`? When does it matter?",
+      "What is shader compilation jank and how do you reduce it?"
+    ],
+    "Testing": [
+      "What is the difference between unit tests, widget tests, and integration tests in Flutter?",
+      "How do you mock a service in a widget test using `mockito` or `mocktail`?",
+      "Explain the `pumpWidget` and `pumpAndSettle` methods. When do you use each?",
+      "How do you test a BLoC or Riverpod provider in isolation?"
+    ],
+    "Platform & Native Integration": [
+      "How do you write a Flutter platform channel? Walk me through the Dart and Kotlin/Swift sides.",
+      "What is the difference between `MethodChannel`, `EventChannel`, and `BasicMessageChannel`?",
+      "How does Flutter handle permissions on Android vs iOS?",
+      "What is `flutter_gen` or `build_runner` used for? Have you used code generation in a project?"
+    ],
+    "Architecture & Best Practices": [
+      "Describe the Clean Architecture layers as applied to a Flutter project.",
+      "What is the Repository pattern and how does it help with testing?",
+      "How do you manage environment configs (dev/staging/prod) in a Flutter app?",
+      "What would you put in a `core` package vs a `features` package in a monorepo?",
+      "How do you handle localisation and internationalisation in Flutter?"
+    ]
+  },
+  "entry_questions": [
+    "Walk me through how Flutter renders UI on screen — from your Dart code down to pixels.",
+    "What is the difference between a StatelessWidget and a StatefulWidget, and when would you choose one over the other?",
+    "Explain the widget tree, element tree, and render tree. How are they related?"
+  ],
+  "all_questions": [
+    "Walk me through how Flutter renders UI on screen — from your Dart code down to pixels.",
+    "What is the difference between a StatelessWidget and a StatefulWidget, and when would you choose one over the other?",
+    "Explain the widget tree, element tree, and render tree. How are they related?",
+    "How does Flutter's flex layout system work? Compare Row/Column with Flex.",
+    "What is the difference between `Expanded`, `Flexible`, and `Spacer`?",
+    "When would you use a `CustomPaint` widget, and what does the `Canvas` API give you?",
+    "How does `RepaintBoundary` improve performance and when should you use it?",
+    "Explain the lifecycle of a StatefulWidget. Which methods are called and in what order?",
+    "Compare `setState`, `InheritedWidget`, `Provider`, and `Riverpod`. When would you pick each?",
+    "What is the difference between `ChangeNotifier` and `StateNotifier`?",
+    "How does BLoC pattern work? What problem does it solve compared to plain `setState`?",
+    "Explain how `ValueNotifier` works and give a real use case for it.",
+    "What are the downsides of using `setState` deep in a large widget tree?",
+    "What is the difference between Navigator 1.0 and Navigator 2.0 (Router API)?",
+    "How does `go_router` compare to `auto_route`? What trade-offs exist?",
+    "How do you pass data between screens and get a result back on pop?",
+    "Explain deep linking in Flutter. How would you set it up for both Android and iOS?",
+    "What is the difference between `Future` and `Stream`? Give a real example of each.",
+    "How does `async`/`await` work under the hood in Dart? What is the event loop?",
+    "How would you handle API errors gracefully across the whole app?",
+    "What is `Isolate` in Dart and when would you spawn one?",
+    "Compare `http` package with `Dio`. What does Dio add?",
+    "How do you profile a Flutter app for jank? Which tools do you use?",
+    "What causes frame drops and how do you fix them?",
+    "Explain `const` constructors — how do they help performance and what are the rules?",
+    "How does `ListView.builder` differ from `ListView`? When does it matter?",
+    "What is shader compilation jank and how do you reduce it?",
+    "What is the difference between unit tests, widget tests, and integration tests in Flutter?",
+    "How do you mock a service in a widget test using `mockito` or `mocktail`?",
+    "Explain the `pumpWidget` and `pumpAndSettle` methods. When do you use each?",
+    "How do you test a BLoC or Riverpod provider in isolation?",
+    "How do you write a Flutter platform channel? Walk me through the Dart and Kotlin/Swift sides.",
+    "What is the difference between `MethodChannel`, `EventChannel`, and `BasicMessageChannel`?",
+    "How does Flutter handle permissions on Android vs iOS?",
+    "What is `flutter_gen` or `build_runner` used for? Have you used code generation in a project?",
+    "Describe the Clean Architecture layers as applied to a Flutter project.",
+    "What is the Repository pattern and how does it help with testing?",
+    "How do you manage environment configs (dev/staging/prod) in a Flutter app?",
+    "What would you put in a `core` package vs a `features` package in a monorepo?",
+    "How do you handle localisation and internationalisation in Flutter?"
+  ]
+}
