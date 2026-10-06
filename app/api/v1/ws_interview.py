@@ -9,6 +9,27 @@ from app.api.ws_dependencies import get_ws_current_user
 from app.services.ai.stt_service import stt_service
 from app.services.ai.audio_analyzer import AudioAnalyzer
 from app.services.ai.gemini_client import GeminiClient
+import json
+import random
+import os
+
+FILLERS = {}
+try:
+    with open("app/cache/audio/fillers.json", "r") as f:
+        FILLERS = json.load(f)
+except Exception as e:
+    print(f"Warning: Could not load fillers cache: {e}")
+
+def get_appropriate_filler(user_text: str) -> str:
+    user_text_lower = user_text.lower()
+    if any(phrase in user_text_lower for phrase in ["dont know", "do not know", "skip", "next"]):
+        return FILLERS.get("move_on", "")
+    elif len(user_text.split()) < 5:
+        return FILLERS.get("short_neutral", "")
+    elif any(word in user_text_lower for phrase in ["yes", "exactly", "correct"]):
+        return FILLERS.get("positive", "")
+    return FILLERS.get("neutral_thinking", "")
+
 from app.services.ai.streaming_session import StreamingInterviewSession
 from app.models.db import SessionLocal, Company, Topic, GithubLink
 from app.services.ai.company_interviewer import CompanyGeminiClient, CompanyInterviewSession
@@ -498,6 +519,12 @@ async def stream_interview_endpoint(
                 
                 try:
                     await manager.send_json({"type": "stream_start"}, user_id)
+                    
+                    # Instantly send a natural filler audio before the LLM generates
+                    filler_audio = get_appropriate_filler(user_text)
+                    if filler_audio:
+                        await manager.send_json({"type": "audio", "base64": filler_audio}, user_id)
+
                     async for item in session.stream_response(user_text):
                         if item["type"] == "metadata":
                             await manager.send_json({"type": "metadata", "is_coding": item["is_coding"]}, user_id)

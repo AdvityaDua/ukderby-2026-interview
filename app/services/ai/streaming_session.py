@@ -222,32 +222,15 @@ class StreamingInterviewSession:
         self.rag_tokens = 0
         self.is_vertex = bool(getattr(settings, 'GOOGLE_APPLICATION_CREDENTIALS', None))
 
-        # ── 1. Try to restore from resume context cache ─────────────────────────
-        #       This skips the 2 most expensive init LLM calls entirely.
-        from app.services.resume_cache import resume_cache
+        # ── Run LLM calls ────────────────────────────────────────────────────────
+        # 1a. Static context summarization
+        context, context_usage = await self.client.summarize_context(resume_text, jd_text, interview_type, role, company, candidate_name)
+        self.input_tokens  += context_usage.get("input_tokens", 0)
+        self.output_tokens += context_usage.get("output_tokens", 0)
         
-        cached = await resume_cache.get(resume_text, jd_text, interview_type, role, company)
-
-        if cached:
-            # ── CACHE HIT: restore summary + skills, zero LLM cost ──────────────
-            context         = cached["context_summary"]
-            initial_skills  = cached["skills"]
-            print(f"[Session] ✅ Resume context cache HIT — skipped summarize_context + skills extraction (~2,000–5,000 tokens saved)")
-        else:
-            # ── CACHE MISS: run LLM calls and cache the result ───────────────────
-            # 1a. Static context summarization
-            context, context_usage = await self.client.summarize_context(resume_text, jd_text, interview_type, role, company, candidate_name)
-            self.input_tokens  += context_usage.get("input_tokens", 0)
-            self.output_tokens += context_usage.get("output_tokens", 0)
-            
-            # 1b. Keyword-based skill extraction (no LLM call needed with LlamaClient)
-            initial_skills = self.client.extract_skills(context, interview_type, role, jd_text)
-            print(f"[Session] Skills extracted (keyword-based): {initial_skills}")
-
-            # ── Store in cache so future rounds are free ─────────────────────────
-            await resume_cache.set(resume_text, jd_text, interview_type, role, company, context, initial_skills)
-            print(f"[Session] 💾 Cached resume context for future rounds")
-
+        # 1b. Keyword-based skill extraction (no LLM call needed with LlamaClient)
+        initial_skills = self.client.extract_skills(context, interview_type, role, jd_text)
+        print(f"[Session] Skills extracted (keyword-based): {initial_skills}")
 
         print(f"[Session] Total init tokens: in={self.input_tokens}, out={self.output_tokens}")
 
