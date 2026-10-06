@@ -9,7 +9,6 @@ from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, System
 from langgraph.graph import StateGraph, END
 from app.core.config import settings
 from .schemas import QuestionEvaluation, EvaluateTurnOutput, Action
-from .fine_tuned_gateway import gateway_client
 
 logger = logging.getLogger(__name__)
 
@@ -273,49 +272,17 @@ STEP 5 — follow_up_hint: specific gap to probe IF should_follow_up is true. Em
 """
 
         try:
-            # ── Try fine-tuned evaluator gateway if enabled ───────────────────
-            data: Optional[EvaluateTurnOutput] = None
-            in_tok = 0
-            out_tok = 0
+            # ── Run Gemini (No Gateway Fallback) ────────────────────────────────────────────
+            result = await self.eval_structured_llm.ainvoke([
+                SystemMessage(content="You are a precise interview evaluator. Classify the response type first, then evaluate."),
+                HumanMessage(content=prompt),
+            ])
+            data = result["parsed"]
+            raw_msg = result.get("raw")
 
-            if settings.FINE_TUNED_EVALUATOR_ENABLED:
-                eval_start = time.monotonic()
-                eval_messages = [
-                    {"role": "system", "content": "You are a precise interview evaluator. Classify the response type first, then evaluate."},
-                    {"role": "user", "content": prompt},
-                ]
-                gateway_result = await gateway_client.generate_evaluator_response(
-                    messages=eval_messages, temperature=0.25, max_tokens=1024
-                )
-                if gateway_result is not None:
-                    try:
-                        data = EvaluateTurnOutput.model_validate(gateway_result)
-                        eval_duration = int((time.monotonic() - eval_start) * 1000)
-                        logger.info(
-                            "[Graph] evaluate_turn via gateway (%dms): type=%s quality=%s",
-                            eval_duration, data.answer_type, data.answer_quality,
-                        )
-                    except Exception as parse_exc:
-                        logger.warning(
-                            "[Graph] Gateway evaluator response failed Pydantic validation: %s — falling back to Gemini",
-                            parse_exc,
-                        )
-                        data = None
-                else:
-                    logger.warning("[Graph] Gateway evaluator returned None — falling back to Gemini")
-
-            # ── Fallback to Gemini ────────────────────────────────────────────
-            if data is None:
-                result = await self.eval_structured_llm.ainvoke([
-                    SystemMessage(content="You are a precise interview evaluator. Classify the response type first, then evaluate."),
-                    HumanMessage(content=prompt),
-                ])
-                data = result["parsed"]
-                raw_msg = result.get("raw")
-
-                usage_meta = getattr(raw_msg, "usage_metadata", {}) or {}
-                in_tok = usage_meta.get("input_tokens", 0)
-                out_tok = usage_meta.get("output_tokens", 0)
+            usage_meta = getattr(raw_msg, "usage_metadata", {}) or {}
+            in_tok = usage_meta.get("input_tokens", 0)
+            out_tok = usage_meta.get("output_tokens", 0)
 
             print(
                 f"[Graph] evaluate_turn: type={data.answer_type} quality={data.answer_quality} "
@@ -775,47 +742,14 @@ INSTRUCTIONS:
 10. If the 🛑 END routing block is present above, action MUST be END — this overrides everything else.
 """
 
-        # ── Try fine-tuned interviewer gateway if enabled ────────────────────
-        evaluation: Optional[QuestionEvaluation] = None
-        in_tok = 0
-        out_tok = 0
+        # ── Run Gemini (No Gateway Fallback) ────────────────────────────────────────────────
+        result = await self.structured_llm.ainvoke(prompt)
+        evaluation = result["parsed"]
+        raw_msg = result.get("raw")
 
-        if settings.FINE_TUNED_INTERVIEWER_ENABLED:
-            gen_start = time.monotonic()
-            interviewer_messages = [
-                {"role": "system", "content": f"You are an expert interviewer conducting a {state['interview_type'].upper()} interview."},
-                {"role": "user", "content": prompt},
-            ]
-            gateway_result = await gateway_client.generate_interviewer_response(
-                messages=interviewer_messages, temperature=0.4, max_tokens=1024
-            )
-            if gateway_result is not None:
-                try:
-                    evaluation = QuestionEvaluation.model_validate(gateway_result)
-                    gen_duration = int((time.monotonic() - gen_start) * 1000)
-                    logger.info(
-                        "[Graph] produce_question via gateway (%dms): coding=%s diff=%s",
-                        gen_duration, evaluation.next_step.is_coding_question,
-                        evaluation.next_step.difficulty,
-                    )
-                except Exception as parse_exc:
-                    logger.warning(
-                        "[Graph] Gateway interviewer response failed Pydantic validation: %s — falling back to Gemini",
-                        parse_exc,
-                    )
-                    evaluation = None
-            else:
-                logger.warning("[Graph] Gateway interviewer returned None — falling back to Gemini")
-
-        # ── Fallback to Gemini ────────────────────────────────────────────────
-        if evaluation is None:
-            result = await self.structured_llm.ainvoke(prompt)
-            evaluation = result["parsed"]
-            raw_msg = result.get("raw")
-
-            usage_meta = getattr(raw_msg, "usage_metadata", {}) or {}
-            in_tok = usage_meta.get("input_tokens", 0)
-            out_tok = usage_meta.get("output_tokens", 0)
+        usage_meta = getattr(raw_msg, "usage_metadata", {}) or {}
+        in_tok = usage_meta.get("input_tokens", 0)
+        out_tok = usage_meta.get("output_tokens", 0)
 
         total = state.get("input_tokens", 0) + in_tok + state.get("output_tokens", 0) + out_tok
         print(

@@ -14,11 +14,6 @@ async def lifespan(app: FastAPI):
     print(f"[CONFIG] BACKEND_URL  = {settings.BACKEND_URL}")
     print(f"[CONFIG] HOST:PORT    = {settings.HOST}:{settings.PORT}")
     print(f"[CONFIG] REDIS_URL    = {settings.REDIS_URL}")
-    # Fetch active API keys from NestJS admin DB (falls back to env vars)
-    # Then start a background loop that re-fetches every 60s so admin key
-    # changes are picked up without restarting the service.
-    await key_manager.refresh(settings.BACKEND_URL)
-    key_manager.start_auto_refresh(settings.BACKEND_URL)
     google_ok   = "✓ set" if key_manager.get_gemini_key() else "✗ MISSING"
     groq_ok     = "✓ set" if key_manager.get_groq_key()   else "✗ MISSING"
     deepgram_ok = "✓ set" if settings.DEEPGRAM_KEY else "✗ MISSING"
@@ -28,22 +23,10 @@ async def lifespan(app: FastAPI):
     if "localhost" in settings.BACKEND_URL:
         print("[WARNING] BACKEND_URL points to localhost — token reporting will FAIL in production!")
         print("[WARNING] Set BACKEND_URL env var to your production NestJS URL.")
-    # ── Fine-tuned gateway health check (non-blocking) ────────────────────
-    if settings.FINE_TUNED_INTERVIEWER_ENABLED or settings.FINE_TUNED_EVALUATOR_ENABLED:
-        try:
-            from app.services.ai.fine_tuned_gateway import gateway_client
-            health_ok = await gateway_client.health_check()
-            gw_status = "✓ reachable" if health_ok else "✗ UNREACHABLE (will fallback to Gemini)"
-        except Exception as gw_exc:
-            gw_status = f"✗ ERROR: {gw_exc}"
-        print(f"[CONFIG] FINE_TUNED_GATEWAY   = {gw_status}")
-        print(f"[CONFIG]   INTERVIEWER_ENABLED = {settings.FINE_TUNED_INTERVIEWER_ENABLED}")
-        print(f"[CONFIG]   EVALUATOR_ENABLED   = {settings.FINE_TUNED_EVALUATOR_ENABLED}")
-        print(f"[CONFIG]   GATEWAY_URL         = {settings.FINE_TUNED_GATEWAY_URL}")
     print("=" * 60)
     yield
     # ── Shutdown ─────────────────────────────────────────────────────────────
-    key_manager.stop_auto_refresh()
+    pass
 
 def create_app() -> FastAPI:
     app = FastAPI(

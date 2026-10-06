@@ -18,7 +18,6 @@ from pydantic import BaseModel, Field
 from app.core.config import settings
 from app.core.key_manager import key_manager
 from .gemini_client import GeminiClient
-from .fine_tuned_gateway import gateway_client
 from .source_interview_planner import question_fingerprint
 from .schemas import (
     Action,
@@ -270,150 +269,6 @@ RULES
 Return JSON matching the schema exactly.
 """.strip()
 
-    # ── Fine-tuned gateway integration ────────────────────────────────────────
-
-    async def _try_gateway_turn(
-        self, state: InterviewState, system_instruction: str, prompt: str
-    ) -> Optional[OptimizedTurnOutput]:
-        """Attempt to run the turn through the fine-tuned gateway.
-
-        Splits the single combined call into two sequential requests:
-          1. /evaluator  — evaluates the candidate's last answer
-          2. /interviewer — generates the next question
-
-        Merges results into an OptimizedTurnOutput.
-        Returns None on any failure (caller should fall back).
-        """
-        use_evaluator = settings.FINE_TUNED_EVALUATOR_ENABLED
-        use_interviewer = settings.FINE_TUNED_INTERVIEWER_ENABLED
-
-        if not use_evaluator and not use_interviewer:
-            return None
-
-        start = time.monotonic()
-        eval_data: Optional[dict] = None
-        interviewer_data: Optional[dict] = None
-
-        # ── Step 1: Evaluate the candidate's last answer ─────────────────────
-        if use_evaluator and state.get("last_user_input"):
-            eval_messages = [
-                {"role": "system", "content": system_instruction},
-                {
-                    "role": "user",
-                    "content": (
-                        f"Evaluate the candidate's answer.\n\n{prompt}\n\n"
-                        f"You MUST return ONLY a valid JSON object matching this exact structure, with no markdown formatting or extra text:\n"
-                        f"{{\n"
-                        f'  "performance_summary": "...",\n'
-                        f'  "answer_type": "genuine_answer",\n'
-                        f'  "answer_quality": "strong",\n'
-                        f'  "should_follow_up": false,\n'
-                        f'  "follow_up_hint": "...",\n'
-                        f'  "newly_covered_skills": [],\n'
-                        f'  "confidence_in_candidate": "high"\n'
-                        f"}}"
-                    ),
-                },
-            ]
-            eval_data = await gateway_client.generate_evaluator_response(
-                messages=eval_messages, temperature=0.25, max_tokens=1024
-            )
-            if eval_data is None:
-                logger.warning(
-                    "[FineTunedGateway] Evaluator call failed — falling back for entire turn"
-                )
-                return None
-
-        # ── Step 2: Generate the next question ───────────────────────────────
-        if use_interviewer:
-            # Enrich the interviewer prompt with evaluation context if available
-            eval_context = ""
-            if eval_data:
-                eval_context = (
-                    f"\nEVALUATION CONTEXT (from evaluator):\n"
-                    f"- answer_type: {eval_data.get('answer_type', 'genuine_answer')}\n"
-                    f"- answer_quality: {eval_data.get('answer_quality', 'not_applicable')}\n"
-                    f"- should_follow_up: {eval_data.get('should_follow_up', False)}\n"
-                    f"- follow_up_hint: {eval_data.get('follow_up_hint', '')}\n"
-                    f"- performance_summary: {eval_data.get('performance_summary', '')}\n"
-                )
-
-            interviewer_messages = [
-                {"role": "system", "content": system_instruction},
-                {
-                    "role": "user",
-                    "content": (
-                        f"Generate the next interview question.\n\n{prompt}"
-                        f"{eval_context}\n\n"
-                        f"You MUST return ONLY a valid JSON object matching this exact structure, with no markdown formatting or extra text:\n"
-                        f"{{\n"
-                        f'  "decision": {{"action": "continue", "reason": "...", "termination_flag": false}},\n'
-                        f'  "next_step": {{"type": "follow_up", "difficulty": "medium", "question": "...", "target_skill": "...", "is_coding_question": false}},\n'
-                        f'  "performance_summary": "...",\n'
-                        f'  "answer_type": "genuine_answer",\n'
-                        f'  "answer_quality": "strong",\n'
-                        f'  "should_follow_up": false,\n'
-                        f'  "follow_up_hint": "...",\n'
-                        f'  "newly_covered_skills": [],\n'
-                        f'  "confidence_in_candidate": "high"\n'
-                        f"}}"
-                    ),
-                },
-            ]
-            interviewer_data = await gateway_client.generate_interviewer_response(
-                messages=interviewer_messages, temperature=0.7, max_tokens=1024
-            )
-            if interviewer_data is None:
-                logger.warning(
-                    "[FineTunedGateway] Interviewer call failed — falling back for entire turn"
-                )
-                return None
-
-        # ── Step 3: Merge results into OptimizedTurnOutput ───────────────────
-        try:
-            merged: Dict[str, Any] = {}
-
-            # Start with evaluator data if available
-            if eval_data:
-                merged.update(eval_data)
-
-            # Overlay interviewer data (question generation takes precedence for
-            # decision/next_step fields)
-            if interviewer_data:
-                merged.update(interviewer_data)
-                # But keep evaluator's evaluation fields if interviewer didn't provide them
-                if eval_data:
-                    for key in ("answer_type", "answer_quality", "should_follow_up",
-                                "follow_up_hint", "newly_covered_skills"):
-                        if key not in interviewer_data and key in eval_data:
-                            merged[key] = eval_data[key]
-
-            # If only one endpoint was called, use its data directly
-            if not eval_data and interviewer_data:
-                merged = interviewer_data
-            elif eval_data and not interviewer_data:
-                merged = eval_data
-
-            parsed = OptimizedTurnOutput.model_validate(merged)
-            duration_ms = int((time.monotonic() - start) * 1000)
-            logger.info(
-                "[FineTunedGateway] Turn completed via gateway (%dms, "
-                "evaluator=%s, interviewer=%s)",
-                duration_ms,
-                "used" if eval_data else "skipped",
-                "used" if interviewer_data else "skipped",
-            )
-            return parsed
-
-        except Exception as exc:
-            duration_ms = int((time.monotonic() - start) * 1000)
-            logger.warning(
-                "[FineTunedGateway] Failed to parse merged gateway response (%dms): "
-                "%s: %s — falling back",
-                duration_ms, type(exc).__name__, exc,
-            )
-            return None
-
     # ── Main turn execution ──────────────────────────────────────────────────
 
     async def run_turn(self, state: InterviewState) -> InterviewState:
@@ -423,14 +278,10 @@ Return JSON matching the schema exactly.
         system_instruction = self._build_system_instruction(state)
         prompt = self._build_prompt(state)
 
-        # ── Try fine-tuned gateway first (if enabled) ────────────────────────
+        # ── Run Gemini (No Gateway Fallback) ────────────────────────────────────────────────
         parsed: Optional[OptimizedTurnOutput] = None
         input_tokens = 0
         output_tokens = 0
-
-        if settings.FINE_TUNED_INTERVIEWER_ENABLED or settings.FINE_TUNED_EVALUATOR_ENABLED:
-            parsed = await self._try_gateway_turn(state, system_instruction, prompt)
-            # Gateway does not report token usage — counts stay at 0 for gateway turns
 
         # ── Fallback to Gemini ────────────────────────────────────────────────
         if parsed is None:
