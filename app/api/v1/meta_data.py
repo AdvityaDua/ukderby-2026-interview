@@ -17,6 +17,8 @@ def get_db():
 
 class ItemCreate(BaseModel):
     name: str
+    logo_icon: Optional[str] = None
+    description: Optional[str] = None
 
 class GithubLinkCreate(BaseModel):
     url: str
@@ -29,7 +31,7 @@ def get_companies(db: Session = Depends(get_db)):
 
 @router.post("/companies")
 def create_company(item: ItemCreate, db: Session = Depends(get_db)):
-    db_item = Company(name=item.name)
+    db_item = Company(name=item.name, logo_icon=item.logo_icon, description=item.description)
     db.add(db_item)
     db.commit()
     db.refresh(db_item)
@@ -41,7 +43,7 @@ def get_topics(db: Session = Depends(get_db)):
 
 @router.post("/topics")
 def create_topic(item: ItemCreate, db: Session = Depends(get_db)):
-    db_item = Topic(name=item.name)
+    db_item = Topic(name=item.name, logo_icon=item.logo_icon, description=item.description)
     db.add(db_item)
     db.commit()
     db.refresh(db_item)

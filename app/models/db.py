@@ -2,7 +2,7 @@ from sqlalchemy import create_engine, Column, Integer, String, ForeignKey
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 from app.core.config import settings
 
-engine = create_engine(settings.DATABASE_URL.replace("postgres://", "postgresql://"))
+engine = create_engine(settings.DATABASE_URL.replace("postgres://", "postgresql://"), pool_pre_ping=True, pool_recycle=300)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
@@ -10,12 +10,16 @@ class Company(Base):
     __tablename__ = 'companies'
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, index=True)
+    logo_icon = Column(String, nullable=True)
+    description = Column(String, nullable=True)
     github_links = relationship("GithubLink", back_populates="company")
 
 class Topic(Base):
     __tablename__ = 'topics'
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, index=True)
+    logo_icon = Column(String, nullable=True)
+    description = Column(String, nullable=True)
     github_links = relationship("GithubLink", back_populates="topic")
 
 class GithubLink(Base):
